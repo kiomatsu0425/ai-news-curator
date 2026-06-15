@@ -1,0 +1,2 @@
+"""Personal RSS news curator."""
+

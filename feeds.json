@@ -1,0 +1,75 @@
+[
+  {
+    "name": "OpenAI Blog",
+    "url": "https://openai.com/news/rss.xml",
+    "topic": "ai",
+    "base_weight": 1.1
+  },
+  {
+    "name": "Google AI Blog",
+    "url": "https://blog.google/technology/ai/rss/",
+    "topic": "ai",
+    "base_weight": 1.0
+  },
+  {
+    "name": "Anthropic News",
+    "url": "https://www.anthropic.com/news/rss.xml",
+    "topic": "ai",
+    "base_weight": 1.0
+  },
+  {
+    "name": "Hugging Face Blog",
+    "url": "https://huggingface.co/blog/feed.xml",
+    "topic": "ai",
+    "base_weight": 1.0
+  },
+  {
+    "name": "TechCrunch AI",
+    "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+    "topic": "ai",
+    "base_weight": 0.9
+  },
+  {
+    "name": "The Decoder",
+    "url": "https://the-decoder.com/feed/",
+    "topic": "ai",
+    "base_weight": 0.9
+  },
+  {
+    "name": "MIT Technology Review AI",
+    "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
+    "topic": "ai",
+    "base_weight": 0.9
+  },
+  {
+    "name": "Latent Space",
+    "url": "https://www.latent.space/feed",
+    "topic": "ai",
+    "base_weight": 1.0
+  },
+  {
+    "name": "Interconnects",
+    "url": "https://www.interconnects.ai/feed",
+    "topic": "ai",
+    "base_weight": 1.0
+  },
+  {
+    "name": "AWS News Blog",
+    "url": "https://aws.amazon.com/blogs/aws/feed/",
+    "topic": "cloud",
+    "base_weight": 0.8
+  },
+  {
+    "name": "NVIDIA Blog",
+    "url": "https://blogs.nvidia.com/feed/",
+    "topic": "datacenter",
+    "base_weight": 0.9
+  },
+  {
+    "name": "Toyota Times",
+    "url": "https://toyotatimes.jp/en/rss/",
+    "topic": "cars",
+    "base_weight": 0.8
+  }
+]
+
