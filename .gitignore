@@ -5,3 +5,4 @@ __pycache__/
 *.py[cod]
 .streamlit/
 work/
+.codex-remote-attachments/

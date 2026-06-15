@@ -18,6 +18,7 @@ class Settings:
     db_path: Path
     feeds_path: Path
     openai_api_key: str | None
+    app_password: str | None
     openai_model: str
     daily_limit: int
     exploration_count: int
@@ -52,6 +53,7 @@ def load_settings() -> Settings:
         db_path=db_path if db_path.is_absolute() else ROOT / db_path,
         feeds_path=feeds_path if feeds_path.is_absolute() else ROOT / feeds_path,
         openai_api_key=_setting("OPENAI_API_KEY"),
+        app_password=_setting("APP_PASSWORD"),
         openai_model=_setting("OPENAI_MODEL", "gpt-4.1-mini") or "gpt-4.1-mini",
         daily_limit=int(_setting("NEWS_DAILY_LIMIT", "12") or "12"),
         exploration_count=int(_setting("NEWS_EXPLORATION_COUNT", "2") or "2"),

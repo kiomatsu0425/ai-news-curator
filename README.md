@@ -26,6 +26,7 @@ Set your OpenAI API key in `.env`.
 
 ```env
 OPENAI_API_KEY=sk-...
+APP_PASSWORD=change-me
 OPENAI_MODEL=gpt-4.1-mini
 NEWS_DB_PATH=data/news_curator.sqlite3
 NEWS_DAILY_LIMIT=12
@@ -55,6 +56,7 @@ Use these secrets:
 
 ```toml
 OPENAI_API_KEY = "sk-..."
+APP_PASSWORD = "change-me"
 OPENAI_MODEL = "gpt-4.1-mini"
 NEWS_DB_PATH = "data/news_curator.sqlite3"
 NEWS_DAILY_LIMIT = "12"
@@ -62,6 +64,8 @@ NEWS_EXPLORATION_COUNT = "2"
 ```
 
 The app reads settings from environment variables first, then from `st.secrets`. This means the same code works locally and on Streamlit Community Cloud.
+
+If `APP_PASSWORD` is set, the app shows a password screen before any news cards are visible. Leave `APP_PASSWORD` unset for local development without a password.
 
 ## Important Note About SQLite On Cloud
 
@@ -94,4 +98,3 @@ Edit `feeds.json`:
 ```
 
 `base_weight` is the source's initial preference weight. Feedback adjusts `source_weights` and `tag_weights` automatically.
-

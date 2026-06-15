@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import json
 import sqlite3
 from datetime import date
@@ -13,6 +14,31 @@ from news_curator.ranker import score_articles, select_daily
 
 
 st.set_page_config(page_title="Personal News Curator", layout="centered")
+
+
+def require_password() -> bool:
+    settings = load_settings()
+    if not settings.app_password:
+        return True
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("Personal News Curator")
+    st.caption("Enter the app password to continue.")
+
+    with st.form("password_form"):
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Unlock", use_container_width=True)
+
+    if submitted:
+        if hmac.compare_digest(password, settings.app_password):
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+
+    return False
 
 
 def load_today_articles() -> list[sqlite3.Row]:
@@ -34,8 +60,8 @@ def feedback(article_id: int, action: str) -> None:
 
 def render_article(article: sqlite3.Row, index: int, total: int) -> None:
     tags = json.loads(article["tags_json"] or "[]")
-    bucket = "探索" if article["selected_bucket"] == "exploration" else "推薦"
-    st.caption(f"{index + 1}/{total} · {bucket} · {article['source']}")
+    bucket = "Explore" if article["selected_bucket"] == "exploration" else "Ranked"
+    st.caption(f"{index + 1}/{total} - {bucket} - {article['source']}")
     st.subheader(article["jp_title"] or article["title"])
     st.write(article["jp_summary"] or article["summary"] or "")
     if tags:
@@ -43,56 +69,67 @@ def render_article(article: sqlite3.Row, index: int, total: int) -> None:
     st.caption(f"score {article['score']:.2f}")
 
     cols = st.columns(4)
-    if cols[0].button("役に立った", use_container_width=True):
+    if cols[0].button("Useful", use_container_width=True):
         feedback(article["id"], "useful")
         st.session_state.card_index = min(index + 1, total)
         st.rerun()
-    if cols[1].button("不要", use_container_width=True):
+    if cols[1].button("Not needed", use_container_width=True):
         feedback(article["id"], "bad")
         st.session_state.card_index = min(index + 1, total)
         st.rerun()
-    if cols[2].button("あとで読む", use_container_width=True):
+    if cols[2].button("Read later", use_container_width=True):
         feedback(article["id"], "later")
         st.session_state.card_index = min(index + 1, total)
         st.rerun()
-    if cols[3].link_button("元記事", article["url"], use_container_width=True):
+    if cols[3].link_button("Open", article["url"], use_container_width=True):
         feedback(article["id"], "opened")
 
 
 def main() -> None:
+    if not require_password():
+        return
+
     st.title("Personal News Curator")
-    st.caption("RSSから集めた記事を日本語要約し、あなたのフィードバックで次回の推薦を調整します。")
+    st.caption("RSS articles are summarized in Japanese and ranked with your feedback.")
 
     with st.sidebar:
         st.header("Daily job")
-        if st.button("RSS取得・要約を実行", use_container_width=True):
-            with st.spinner("RSSを取得して要約しています..."):
+        if st.button("Fetch and summarize RSS", use_container_width=True):
+            with st.spinner("Fetching RSS feeds and summarizing articles..."):
                 stats = run_daily()
-            st.success(f"取得 {stats['fetched']}件 / 要約 {stats['summarized']}件 / 本日表示 {stats['selected']}件")
+            st.success(
+                f"Fetched {stats['fetched']} / summarized {stats['summarized']} / selected {stats['selected']}"
+            )
             st.session_state.card_index = 0
 
-        st.header("表示")
-        if st.button("先頭に戻る", use_container_width=True):
+        st.header("View")
+        if st.button("Back to first card", use_container_width=True):
             st.session_state.card_index = 0
+            st.rerun()
+
+        if st.session_state.get("authenticated") and st.button("Lock", use_container_width=True):
+            st.session_state.authenticated = False
             st.rerun()
 
     articles = load_today_articles()
     if not articles:
-        st.info("まだ記事がありません。サイドバーの「RSS取得・要約を実行」を押してください。")
+        st.info("No articles yet. Click 'Fetch and summarize RSS' in the sidebar.")
         return
 
     st.session_state.setdefault("card_index", 0)
     index = min(st.session_state.card_index, len(articles))
     if index >= len(articles):
-        st.success("今日のカードは見終わりました。")
+        st.success("You have finished today's cards.")
         st.session_state.card_index = 0
         return
 
     render_article(articles[index], index, len(articles))
 
-    with st.expander("今日の12件"):
+    with st.expander("Today's selected articles"):
         for row in articles:
-            st.markdown(f"- [{row['jp_title'] or row['title']}]({row['url']}) · {row['source']} · `{row['selected_bucket']}`")
+            st.markdown(
+                f"- [{row['jp_title'] or row['title']}]({row['url']}) - {row['source']} - `{row['selected_bucket']}`"
+            )
 
 
 if __name__ == "__main__":
