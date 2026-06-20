@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import re
 from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -12,6 +13,15 @@ from .db import utc_now
 
 
 DEFAULT_STORE_PATH = Path(__file__).resolve().parent.parent / "data" / "news_items.json"
+BROKEN_TEXT_PATTERNS = (
+    "???",
+    "????",
+    "�",
+    "窶",
+    "・ｽ",
+    "遯ｶ",
+)
+JAPANESE_CHAR_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
 
 
 def load_store(path: Path = DEFAULT_STORE_PATH) -> dict[str, Any]:
@@ -28,9 +38,32 @@ def load_store(path: Path = DEFAULT_STORE_PATH) -> dict[str, Any]:
 def looks_mojibake(value: Any) -> bool:
     if not isinstance(value, str) or not value:
         return False
+    if any(pattern in value for pattern in BROKEN_TEXT_PATTERNS):
+        return True
     question_count = value.count("?")
     replacement_count = value.count("\ufffd")
-    return replacement_count > 0 or (question_count >= 5 and question_count / max(len(value), 1) > 0.08)
+    if replacement_count > 0:
+        return True
+    return question_count >= 5 and question_count / max(len(value), 1) > 0.08
+
+
+def has_broken_japanese(text: str | None) -> bool:
+    if not text:
+        return False
+    if looks_mojibake(text):
+        return True
+    return "?" in text and not JAPANESE_CHAR_RE.search(text)
+
+
+def article_needs_summary(article: dict[str, Any]) -> bool:
+    jp_title = article.get("jp_title")
+    jp_summary = article.get("jp_summary")
+    return (
+        not jp_title
+        or not jp_summary
+        or has_broken_japanese(jp_title)
+        or has_broken_japanese(jp_summary)
+    )
 
 
 def save_store(data: dict[str, Any], path: Path = DEFAULT_STORE_PATH) -> None:
@@ -79,15 +112,7 @@ def upsert_raw_articles(articles: list[dict[str, Any]], path: Path = DEFAULT_STO
 
 def pending_articles(limit: int = 12, path: Path = DEFAULT_STORE_PATH) -> list[dict[str, Any]]:
     data = load_store(path)
-    pending = [
-        article for article in data["articles"]
-        if (
-            not article.get("jp_title")
-            or not article.get("jp_summary")
-            or looks_mojibake(article.get("jp_title"))
-            or looks_mojibake(article.get("jp_summary"))
-        )
-    ]
+    pending = [article for article in data["articles"] if article_needs_summary(article)]
     return sorted(pending, key=lambda a: a.get("published_at") or "", reverse=True)[:limit]
 
 
@@ -95,7 +120,9 @@ def reset_mojibake_summaries(path: Path = DEFAULT_STORE_PATH) -> dict[str, int]:
     data = load_store(path)
     reset_count = 0
     for article in data["articles"]:
-        if looks_mojibake(article.get("jp_title")) or looks_mojibake(article.get("jp_summary")):
+        if not article_needs_summary(article):
+            continue
+        if article.get("jp_title") or article.get("jp_summary") or article.get("tags"):
             article["jp_title"] = None
             article["jp_summary"] = None
             article["tags"] = []
@@ -162,12 +189,7 @@ def select_daily_articles(
     source_weights, tag_weights = _feedback_weights(data)
     candidates = []
     for article in data["articles"]:
-        if (
-            not article.get("jp_title")
-            or not article.get("jp_summary")
-            or looks_mojibake(article.get("jp_title"))
-            or looks_mojibake(article.get("jp_summary"))
-        ):
+        if article_needs_summary(article):
             continue
         feedback_actions = [a["action"] for a in data.get("feedback", {}).get(article["url"], [])]
         if "useful" in feedback_actions or "bad" in feedback_actions:
