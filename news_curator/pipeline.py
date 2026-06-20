@@ -4,7 +4,7 @@ from .config import load_feeds, load_settings
 from .db import connect, init_db, save_summary, upsert_article
 from .fetcher import fetch_feed
 from .ranker import score_articles, select_daily
-from .summarizer import summarize_article
+from .summarizer import SummarizationRateLimited, summarize_article
 
 
 def run_daily(max_items_per_feed: int = 12) -> dict[str, int]:
@@ -14,6 +14,8 @@ def run_daily(max_items_per_feed: int = 12) -> dict[str, int]:
 
     fetched = 0
     summarized = 0
+    rate_limited = False
+    errors = 0
     with connect(settings.db_path) as conn:
         init_db(conn)
         for feed in feeds:
@@ -26,11 +28,23 @@ def run_daily(max_items_per_feed: int = 12) -> dict[str, int]:
                 ).fetchone()
                 if row and row["jp_title"]:
                     continue
-                result = summarize_article(article, settings.openai_api_key, settings.openai_model)
+                if rate_limited or summarized >= settings.max_summaries_per_run:
+                    continue
+                try:
+                    result = summarize_article(article, settings.openai_api_key, settings.openai_model)
+                except SummarizationRateLimited:
+                    rate_limited = True
+                    errors += 1
+                    continue
                 save_summary(conn, article_id, result["jp_title"], result["jp_summary"], result["tags"])
                 summarized += 1
         score_articles(conn, feed_weights)
         selected = select_daily(conn, settings.daily_limit, settings.exploration_count)
 
-    return {"fetched": fetched, "summarized": summarized, "selected": len(selected)}
-
+    return {
+        "fetched": fetched,
+        "summarized": summarized,
+        "selected": len(selected),
+        "rate_limited": int(rate_limited),
+        "errors": errors,
+    }

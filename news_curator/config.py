@@ -22,6 +22,7 @@ class Settings:
     openai_model: str
     daily_limit: int
     exploration_count: int
+    max_summaries_per_run: int
 
 
 def _read_streamlit_secret(key: str) -> Any | None:
@@ -57,6 +58,7 @@ def load_settings() -> Settings:
         openai_model=_setting("OPENAI_MODEL", "gpt-4.1-mini") or "gpt-4.1-mini",
         daily_limit=int(_setting("NEWS_DAILY_LIMIT", "12") or "12"),
         exploration_count=int(_setting("NEWS_EXPLORATION_COUNT", "2") or "2"),
+        max_summaries_per_run=int(_setting("NEWS_MAX_SUMMARIES_PER_RUN", "20") or "20"),
     )
 
 

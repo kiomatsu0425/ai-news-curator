@@ -31,6 +31,7 @@ OPENAI_MODEL=gpt-4.1-mini
 NEWS_DB_PATH=data/news_curator.sqlite3
 NEWS_DAILY_LIMIT=12
 NEWS_EXPLORATION_COUNT=2
+NEWS_MAX_SUMMARIES_PER_RUN=20
 ```
 
 Run the app:
@@ -61,11 +62,14 @@ OPENAI_MODEL = "gpt-4.1-mini"
 NEWS_DB_PATH = "data/news_curator.sqlite3"
 NEWS_DAILY_LIMIT = "12"
 NEWS_EXPLORATION_COUNT = "2"
+NEWS_MAX_SUMMARIES_PER_RUN = "20"
 ```
 
 The app reads settings from environment variables first, then from `st.secrets`. This means the same code works locally and on Streamlit Community Cloud.
 
 If `APP_PASSWORD` is set, the app shows a password screen before any news cards are visible. Leave `APP_PASSWORD` unset for local development without a password.
+
+`NEWS_MAX_SUMMARIES_PER_RUN` limits the number of OpenAI summary calls in one click. Lower it if your OpenAI account has a small quota or frequent rate limits.
 
 ## Important Note About SQLite On Cloud
 

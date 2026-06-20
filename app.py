@@ -100,6 +100,11 @@ def main() -> None:
             st.success(
                 f"Fetched {stats['fetched']} / summarized {stats['summarized']} / selected {stats['selected']}"
             )
+            if stats.get("rate_limited"):
+                st.warning(
+                    "OpenAI rate limit or quota was reached. Saved fetched articles and stopped API summarization. "
+                    "Try again later or lower NEWS_MAX_SUMMARIES_PER_RUN."
+                )
             st.session_state.card_index = 0
 
         st.header("View")
