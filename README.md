@@ -1,18 +1,14 @@
 # Personal News Curator
 
-RSS feeds are collected, summarized in Japanese with the OpenAI API, stored in SQLite, and shown as daily Streamlit cards. Feedback from each card adjusts future ranking by tag and source preference.
+RSS記事を収集し、Codex Automationで要約し、Streamlit Cloudで表示する個人用ニュースキュレーターです。
 
-## Features
+Streamlit Cloud上ではOpenAI APIを呼び出しません。API課金を避けるため、処理を次の3つに分けています。
 
-- Fetch articles from RSS feeds listed in `feeds.json`
-- Generate Japanese title, 3-line summary, and tags with the OpenAI API
-- Store articles, feedback, source weights, and tag weights in SQLite
-- Show one article card at a time in Streamlit
-- Record "useful", "not needed", "read later", and "opened" feedback
-- Rank by freshness, tag preference, source preference, and source base weight
-- Select 12 articles per day, including 2 exploration items
+1. RSS取得: バッチプログラムが `data/news_items.json` に記事本文を保存
+2. LLM要約: Codex Automationが未要約記事を読み、要約をJSONに追記
+3. 表示: Streamlit Cloudが `data/news_items.json` を読むだけ
 
-## Local Setup
+## ローカルセットアップ
 
 ```powershell
 python -m venv .venv
@@ -22,75 +18,48 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-Set your OpenAI API key in `.env`.
-
-```env
-OPENAI_API_KEY=sk-...
-APP_PASSWORD=change-me
-OPENAI_MODEL=gpt-4.1-mini
-NEWS_DB_PATH=data/news_curator.sqlite3
-NEWS_DAILY_LIMIT=12
-NEWS_EXPLORATION_COUNT=2
-NEWS_MAX_SUMMARIES_PER_RUN=20
-```
-
-Run the app:
+ローカルで起動:
 
 ```powershell
 streamlit run app.py
 ```
 
-Open the displayed local URL, usually `http://localhost:8501`.
-
-## Streamlit Community Cloud
-
-This repository can be deployed directly to Streamlit Community Cloud.
-
-1. Go to `https://share.streamlit.io/`.
-2. Create a new app from GitHub.
-3. Select repository: `kiomatsu0425/ai-news-curator`.
-4. Select branch: `main`.
-5. Select entrypoint file: `app.py`.
-6. Open "Advanced settings" and add secrets.
-
-Use these secrets:
+## Streamlit Cloud Secrets
 
 ```toml
-OPENAI_API_KEY = "sk-..."
-APP_PASSWORD = "change-me"
-OPENAI_MODEL = "gpt-4.1-mini"
-NEWS_DB_PATH = "data/news_curator.sqlite3"
+APP_PASSWORD = "好きなパスワード"
 NEWS_DAILY_LIMIT = "12"
 NEWS_EXPLORATION_COUNT = "2"
-NEWS_MAX_SUMMARIES_PER_RUN = "20"
 ```
 
-The app reads settings from environment variables first, then from `st.secrets`. This means the same code works locally and on Streamlit Community Cloud.
+`APP_PASSWORD` を設定すると、表示前にパスワード入力画面が出ます。
 
-If `APP_PASSWORD` is set, the app shows a password screen before any news cards are visible. Leave `APP_PASSWORD` unset for local development without a password.
+## RSS取得バッチ
 
-`NEWS_MAX_SUMMARIES_PER_RUN` limits the number of OpenAI summary calls in one click. Lower it if your OpenAI account has a small quota or frequent rate limits.
-
-## Important Note About SQLite On Cloud
-
-SQLite works for the first cloud deployment and is enough to confirm smartphone access. However, Streamlit Community Cloud storage should be treated as app-local and not as a durable production database. For long-term use, move the database to Supabase Postgres or another managed database.
-
-## Daily Fetch
-
-From the Streamlit UI, click "RSS取得・要約を実行" in the sidebar.
-
-For local scheduled execution:
+RSSを取得して `data/news_items.json` に保存します。LLMやOpenAI APIは呼びません。
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python scripts\fetch_daily.py
+python scripts\fetch_rss_batch.py --max-items-per-feed 12
+git add data/news_items.json
+git commit -m "Fetch RSS articles"
+git push
 ```
 
-For cloud scheduled execution, the next recommended step is GitHub Actions plus a cloud database.
+GitHub Actionsにも `.github/workflows/fetch-rss.yml` を用意しています。毎日 07:00 JST にRSSを取得し、変更があれば `data/news_items.json` をコミットします。GitHubのActions画面から手動実行もできます。
 
-## Add Feeds
+## Codex Automationによる要約
 
-Edit `feeds.json`:
+Codex Automationには [docs/codex-automation.md](docs/codex-automation.md) のプロンプトを登録します。
+
+Automationは次を行います。
+
+- `scripts/list_pending_summaries.py` で未要約記事を確認
+- `data/news_items.json` の `jp_title`, `jp_summary`, `tags` を埋める
+- コミットしてGitHubへpush
+
+## RSSの追加
+
+RSS一覧は `feeds.json` です。
 
 ```json
 {
@@ -101,4 +70,4 @@ Edit `feeds.json`:
 }
 ```
 
-`base_weight` is the source's initial preference weight. Feedback adjusts `source_weights` and `tag_weights` automatically.
+`base_weight` は表示順位の初期重みです。だいたい `0.8` から `1.1` の範囲で調整します。

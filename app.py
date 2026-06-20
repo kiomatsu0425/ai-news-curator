@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import hmac
 import json
-import sqlite3
-from datetime import date
 
 import streamlit as st
 
 from news_curator.config import load_feeds, load_settings
-from news_curator.db import connect, init_db, record_feedback
-from news_curator.pipeline import run_daily
-from news_curator.ranker import score_articles, select_daily
+from news_curator.static_store import load_store, record_feedback, select_daily_articles
 
 
 st.set_page_config(page_title="個人ニュースキュレーター", layout="centered")
@@ -41,48 +37,43 @@ def require_password() -> bool:
     return False
 
 
-def load_today_articles() -> list[sqlite3.Row]:
+def load_today_articles() -> list[dict]:
     settings = load_settings()
     feeds = load_feeds(settings.feeds_path)
     feed_weights = {feed["name"]: float(feed.get("base_weight", 0.8)) for feed in feeds}
-    with connect(settings.db_path) as conn:
-        init_db(conn)
-        score_articles(conn, feed_weights)
-        return select_daily(conn, settings.daily_limit, settings.exploration_count, today=date.today())
+    return select_daily_articles(feed_weights, settings.daily_limit, settings.exploration_count)
 
 
-def feedback(article_id: int, action: str) -> None:
-    settings = load_settings()
-    with connect(settings.db_path) as conn:
-        init_db(conn)
-        record_feedback(conn, article_id, action)
+def feedback(article_url: str, action: str) -> None:
+    record_feedback(article_url, action)
 
 
-def render_article(article: sqlite3.Row, index: int, total: int) -> None:
-    tags = json.loads(article["tags_json"] or "[]")
-    bucket = "探索枠" if article["selected_bucket"] == "exploration" else "推薦"
+def render_article(article: dict, index: int, total: int) -> None:
+    tags = article.get("tags") or []
+    bucket = "探索枠" if article.get("selected_bucket") == "exploration" else "推薦"
     st.caption(f"{index + 1}/{total} - {bucket} - {article['source']}")
-    st.subheader(article["jp_title"] or article["title"])
-    st.write(article["jp_summary"] or article["summary"] or "")
+    st.subheader(article.get("jp_title") or article["title"])
+    st.write(article.get("jp_summary") or article.get("summary") or "")
     if tags:
         st.write(" ".join(f"`{tag}`" for tag in tags))
-    st.caption(f"score {article['score']:.2f}")
+    if article.get("published_at"):
+        st.caption(f"published: {article['published_at']}")
 
     cols = st.columns(4)
     if cols[0].button("役に立った", use_container_width=True):
-        feedback(article["id"], "useful")
+        feedback(article["url"], "useful")
         st.session_state.card_index = min(index + 1, total)
         st.rerun()
     if cols[1].button("不要", use_container_width=True):
-        feedback(article["id"], "bad")
+        feedback(article["url"], "bad")
         st.session_state.card_index = min(index + 1, total)
         st.rerun()
     if cols[2].button("あとで読む", use_container_width=True):
-        feedback(article["id"], "later")
+        feedback(article["url"], "later")
         st.session_state.card_index = min(index + 1, total)
         st.rerun()
     if cols[3].link_button("元記事", article["url"], use_container_width=True):
-        feedback(article["id"], "opened")
+        feedback(article["url"], "opened")
 
 
 def render_intro() -> None:
@@ -92,14 +83,15 @@ def render_intro() -> None:
     with st.container(border=True):
         st.markdown(
             """
-            このアプリは、登録したRSSフィードから記事を集め、OpenAI APIで日本語タイトル・3行要約・タグを作ります。
-            表示された記事に「役に立った」「不要」「あとで読む」を付けると、タグや配信元の好みが保存され、次回以降の並び順に反映されます。
+            このアプリは、事前に収集・要約されたRSS記事を表示するためのビューアです。
+            Streamlit Cloud上ではOpenAI APIを呼び出さず、`data/news_items.json` に保存された要約済みデータだけを読み込みます。
+            RSS取得はバッチ処理、記事要約はCodex Automationで行う想定です。
 
             使い方:
-            1. 左のサイドバーで「RSS取得・要約を実行」を押します。
-            2. 今日のカードを1件ずつ確認します。
-            3. 各カードで「役に立った」「不要」「あとで読む」「元記事」を選びます。
-            4. 次回取得時は、好み・新しさ・探索枠を組み合わせて12件を表示します。
+            1. 今日のカードを1件ずつ確認します。
+            2. 各カードで「役に立った」「不要」「あとで読む」「元記事」を選びます。
+            3. フィードバックは表示順の調整に使われます。
+            4. 新しい記事は、RSSバッチとCodex Automationが更新したあとに表示されます。
             """
         )
 
@@ -111,19 +103,10 @@ def main() -> None:
     render_intro()
 
     with st.sidebar:
-        st.header("日次処理")
-        if st.button("RSS取得・要約を実行", use_container_width=True):
-            with st.spinner("RSSを取得し、記事を要約しています..."):
-                stats = run_daily()
-            st.success(
-                f"取得 {stats['fetched']}件 / 要約 {stats['summarized']}件 / 表示 {stats['selected']}件"
-            )
-            if stats.get("rate_limited"):
-                st.warning(
-                    "OpenAI APIのレート制限またはクォータに達しました。取得済み記事は保存し、API要約だけ停止しました。"
-                    "時間を置いて再実行するか、NEWS_MAX_SUMMARIES_PER_RUNを小さくしてください。"
-                )
-            st.session_state.card_index = 0
+        store = load_store()
+        st.header("データ")
+        st.caption(f"保存記事: {len(store['articles'])}件")
+        st.caption(f"最終更新: {store.get('generated_at') or '未更新'}")
 
         st.header("表示")
         if st.button("先頭のカードに戻る", use_container_width=True):
@@ -136,7 +119,7 @@ def main() -> None:
 
     articles = load_today_articles()
     if not articles:
-        st.info("まだ記事がありません。左のサイドバーから「RSS取得・要約を実行」を押してください。")
+        st.info("まだ表示できる要約済み記事がありません。RSSバッチとCodex Automationの更新後に表示されます。")
         return
 
     st.session_state.setdefault("card_index", 0)
@@ -151,7 +134,7 @@ def main() -> None:
     with st.expander("今日の選定記事"):
         for row in articles:
             st.markdown(
-                f"- [{row['jp_title'] or row['title']}]({row['url']}) - {row['source']} - `{row['selected_bucket']}`"
+                f"- [{row.get('jp_title') or row['title']}]({row['url']}) - {row['source']} - `{row.get('selected_bucket')}`"
             )
 
 
