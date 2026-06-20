@@ -44,3 +44,30 @@ Keep summaries concise and useful for deciding whether to read the original arti
 ```
 
 Codex Automation uses Codex to perform the summarization work in the repo. The Streamlit app does not make API calls.
+
+## Local Environment Scripts
+
+Use these scripts for the Automation local environment.
+
+Setup script:
+
+```bash
+bash scripts/automation_setup.sh
+```
+
+Cleanup script:
+
+```bash
+bash scripts/automation_cleanup.sh
+```
+
+If the environment is Windows/PowerShell, use these instead:
+
+```powershell
+.\scripts\automation_setup.ps1
+.\scripts\automation_cleanup.ps1
+```
+
+The setup script only installs Python dependencies and runs light validation. It does not fetch RSS and does not summarize articles.
+
+The cleanup script removes generated Python caches and prints `git status --short`. It intentionally does not delete `data/news_items.json`, because that file is the shared artifact updated by the RSS batch and Codex Automation.

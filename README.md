@@ -57,6 +57,20 @@ Automationは次を行います。
 - `data/news_items.json` の `jp_title`, `jp_summary`, `tags` を埋める
 - コミットしてGitHubへpush
 
+Automationのローカル環境には次を設定します。
+
+Setup:
+
+```bash
+bash scripts/automation_setup.sh
+```
+
+Cleanup:
+
+```bash
+bash scripts/automation_cleanup.sh
+```
+
 ## RSSの追加
 
 RSS一覧は `feeds.json` です。
