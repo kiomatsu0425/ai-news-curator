@@ -25,6 +25,14 @@ def load_store(path: Path = DEFAULT_STORE_PATH) -> dict[str, Any]:
     return data
 
 
+def looks_mojibake(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    question_count = value.count("?")
+    replacement_count = value.count("\ufffd")
+    return replacement_count > 0 or (question_count >= 5 and question_count / max(len(value), 1) > 0.08)
+
+
 def save_store(data: dict[str, Any], path: Path = DEFAULT_STORE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data["generated_at"] = utc_now()
@@ -73,9 +81,33 @@ def pending_articles(limit: int = 12, path: Path = DEFAULT_STORE_PATH) -> list[d
     data = load_store(path)
     pending = [
         article for article in data["articles"]
-        if not article.get("jp_title") or not article.get("jp_summary")
+        if (
+            not article.get("jp_title")
+            or not article.get("jp_summary")
+            or looks_mojibake(article.get("jp_title"))
+            or looks_mojibake(article.get("jp_summary"))
+        )
     ]
     return sorted(pending, key=lambda a: a.get("published_at") or "", reverse=True)[:limit]
+
+
+def reset_mojibake_summaries(path: Path = DEFAULT_STORE_PATH) -> dict[str, int]:
+    data = load_store(path)
+    reset_count = 0
+    for article in data["articles"]:
+        if looks_mojibake(article.get("jp_title")) or looks_mojibake(article.get("jp_summary")):
+            article["jp_title"] = None
+            article["jp_summary"] = None
+            article["tags"] = []
+            article["selected_date"] = None
+            article["selected_rank"] = None
+            article["selected_bucket"] = None
+            reset_count += 1
+
+    if reset_count:
+        save_store(data, path)
+
+    return {"reset": reset_count, "total": len(data["articles"])}
 
 
 def _age_days(published_at: str | None) -> float:
@@ -130,7 +162,12 @@ def select_daily_articles(
     source_weights, tag_weights = _feedback_weights(data)
     candidates = []
     for article in data["articles"]:
-        if not article.get("jp_title") or not article.get("jp_summary"):
+        if (
+            not article.get("jp_title")
+            or not article.get("jp_summary")
+            or looks_mojibake(article.get("jp_title"))
+            or looks_mojibake(article.get("jp_summary"))
+        ):
             continue
         feedback_actions = [a["action"] for a in data.get("feedback", {}).get(article["url"], [])]
         if "useful" in feedback_actions or "bad" in feedback_actions:

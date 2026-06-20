@@ -30,14 +30,18 @@ In repository kiomatsu0425/ai-news-curator, summarize pending RSS articles witho
 
 Steps:
 1. Pull the latest main branch.
-2. Run: python scripts/list_pending_summaries.py --limit 12
-3. Open data/news_items.json.
-4. For each pending article, fill:
+2. Run: python scripts/reset_mojibake_summaries.py
+3. Run: python scripts/list_pending_summaries.py --limit 12
+4. Open data/news_items.json as UTF-8.
+5. For each pending article, fill:
    - jp_title: natural Japanese title
    - jp_summary: Japanese 3-line summary
    - tags: 2 to 5 concise Japanese or English topic tags
-5. Do not change existing feedback.
-6. Commit and push data/news_items.json with message:
+6. Japanese text must be real UTF-8 Japanese. Do not replace Japanese characters with question marks. Do not write mojibake such as "????".
+7. Before committing, run: python scripts/list_pending_summaries.py --limit 12
+8. If an article still appears pending only because of "????" or broken Japanese, fix it before committing.
+9. Do not change existing feedback.
+10. Commit and push data/news_items.json with message:
    "Summarize RSS articles"
 
 Keep summaries concise and useful for deciding whether to read the original article.

@@ -14,5 +14,8 @@ if ($LASTEXITCODE -ne 0) { throw "dependency install failed" }
 & $python -m compileall app.py news_curator scripts
 if ($LASTEXITCODE -ne 0) { throw "compileall failed" }
 
+& $python scripts\reset_mojibake_summaries.py | Out-File -Encoding utf8 $env:TEMP\reset_mojibake_summaries.json
+if ($LASTEXITCODE -ne 0) { throw "mojibake reset failed" }
+
 & $python scripts\list_pending_summaries.py --limit 1 | Out-File -Encoding utf8 $env:TEMP\pending_summaries_preview.json
 if ($LASTEXITCODE -ne 0) { throw "pending summary preview failed" }
