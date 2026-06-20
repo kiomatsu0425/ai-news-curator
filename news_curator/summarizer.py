@@ -7,9 +7,9 @@ from openai import APIError, OpenAI, RateLimitError
 
 
 SYSTEM_PROMPT = """
-You are a personal news curator.
-Convert the input article into a form that helps a Japanese reader decide whether to read it.
-Return JSON only. Tags should contain 2 to 5 concise topic labels.
+あなたは個人向けニュースキュレーターです。
+入力された記事を、日本語読者が読む価値を判断しやすい形に変換してください。
+出力はJSONのみ。タグは2〜5個で、短く具体的なトピック名にしてください。
 """.strip()
 
 
@@ -23,7 +23,7 @@ def _fallback(title: str, summary: str, source: str) -> dict[str, Any]:
         tags.append("Models")
     return {
         "jp_title": title,
-        "jp_summary": summary[:300] or "Summary was not generated. Set OPENAI_API_KEY and fetch again.",
+        "jp_summary": summary[:300] or "要約はまだ生成されていません。OPENAI_API_KEYを設定して再取得してください。",
         "tags": tags[:5],
     }
 
@@ -48,7 +48,7 @@ def summarize_article(article: dict, api_key: str | None, model: str) -> dict[st
                 {
                     "role": "user",
                     "content": (
-                        "Create a Japanese title, a three-line Japanese summary, and tags for this article.\n"
+                        "この記事について、日本語タイトル、3行の日本語要約、タグを作成してください。\n"
                         f"{json.dumps(user_payload, ensure_ascii=False)}"
                     ),
                 },
