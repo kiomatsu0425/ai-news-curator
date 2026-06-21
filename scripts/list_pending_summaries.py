@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from news_curator.static_store import pending_articles
+from news_curator.postgres_store import pending_articles
 
 
 def main() -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from news_curator.static_store import reset_mojibake_summaries
+from news_curator.postgres_store import reset_mojibake_summaries
 
 
 def main() -> None:

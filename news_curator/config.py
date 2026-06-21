@@ -6,7 +6,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(path: Path, *args: Any, **kwargs: Any) -> bool:
+        if not path.exists():
+            return False
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return True
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -15,7 +30,7 @@ DEFAULT_FEEDS_PATH = ROOT / "feeds.json"
 
 @dataclass(frozen=True)
 class Settings:
-    db_path: Path
+    database_url: str | None
     feeds_path: Path
     app_password: str | None
     daily_limit: int
@@ -45,10 +60,9 @@ def _setting(key: str, default: str | None = None) -> str | None:
 
 def load_settings() -> Settings:
     load_dotenv(ROOT / ".env")
-    db_path = Path(_setting("NEWS_DB_PATH", "data/news_curator.sqlite3") or "data/news_curator.sqlite3")
     feeds_path = Path(_setting("NEWS_FEEDS_PATH", str(DEFAULT_FEEDS_PATH)) or str(DEFAULT_FEEDS_PATH))
     return Settings(
-        db_path=db_path if db_path.is_absolute() else ROOT / db_path,
+        database_url=_setting("DATABASE_URL"),
         feeds_path=feeds_path if feeds_path.is_absolute() else ROOT / feeds_path,
         app_password=_setting("APP_PASSWORD"),
         daily_limit=int(_setting("NEWS_DAILY_LIMIT", "12") or "12"),

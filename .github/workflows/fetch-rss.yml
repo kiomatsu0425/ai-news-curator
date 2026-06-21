@@ -6,7 +6,7 @@ on:
     - cron: "0 8 * * *"
       timezone: "Asia/Tokyo"
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   fetch-rss:
@@ -22,12 +22,6 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Fetch RSS
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python scripts/fetch_rss_batch.py --max-items-per-feed 12
-
-      - name: Commit updated articles
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/news_items.json
-          git diff --cached --quiet || git commit -m "Fetch RSS articles"
-          git push

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import hmac
-import json
 
 import streamlit as st
 
 from news_curator.config import load_feeds, load_settings
-from news_curator.static_store import load_store, record_feedback, select_daily_articles
+from news_curator.postgres_store import record_feedback, select_daily_articles, store_stats
 
 
 st.set_page_config(page_title="個人ニュースキュレーター", layout="centered")
@@ -84,7 +83,7 @@ def render_intro() -> None:
         st.markdown(
             """
             このアプリは、事前に収集・要約されたRSS記事を表示するためのビューアです。
-            Streamlit Cloud上ではOpenAI APIを呼び出さず、`data/news_items.json` に保存された要約済みデータだけを読み込みます。
+            Streamlit Cloud上ではOpenAI APIを呼び出さず、Neon Postgresに保存された要約済みデータだけを読み込みます。
             RSS取得はバッチ処理、記事要約はCodex Automationで行う想定です。
 
             使い方:
@@ -103,10 +102,15 @@ def main() -> None:
     render_intro()
 
     with st.sidebar:
-        store = load_store()
         st.header("データ")
-        st.caption(f"保存記事: {len(store['articles'])}件")
-        st.caption(f"最終更新: {store.get('generated_at') or '未更新'}")
+        try:
+            stats = store_stats()
+        except RuntimeError as exc:
+            st.error(str(exc))
+            return
+        st.caption(f"保存記事: {stats['articles']}件")
+        st.caption(f"フィードバック: {stats['feedback']}件")
+        st.caption(f"最終更新: {stats.get('generated_at') or '未更新'}")
 
         st.header("表示")
         if st.button("先頭のカードに戻る", use_container_width=True):
@@ -117,7 +121,11 @@ def main() -> None:
             st.session_state.authenticated = False
             st.rerun()
 
-    articles = load_today_articles()
+    try:
+        articles = load_today_articles()
+    except RuntimeError as exc:
+        st.error(str(exc))
+        return
     if not articles:
         st.info("まだ表示できる要約済み記事がありません。RSSバッチとCodex Automationの更新後に表示されます。")
         return
