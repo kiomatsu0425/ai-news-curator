@@ -10,20 +10,17 @@ Use this split:
 
 ## Required Secrets
 
-Get the value from Neon Console:
-
-1. Open the Neon project.
-2. Click Connect.
-3. Select the production branch, `neondb` database, and the app role.
-4. Copy the pooled connection string. Prefer the hostname that contains `-pooler`.
-
-For local Codex Automation execution, put the value in the repository root `.env` file:
+For local Codex Automation execution, keep the Neon connection string in the repository root `.env` file:
 
 ```text
 DATABASE_URL=postgresql://user:password@host.neon.tech/dbname?sslmode=require
 ```
 
-Also set the same value in GitHub Actions Secrets and Streamlit Cloud Secrets.
+Set it once before running the automation. If it is missing or invalid, stop and ask the user to set it. Do not try to retrieve credentials during an automation run.
+
+The value comes from Neon Console > Project > Connect. Use the pooled connection string when available, preferably with a hostname that contains `-pooler`.
+
+Also set the same value once in GitHub Actions Secrets and Streamlit Cloud Secrets.
 
 ## RSS Fetch Batch
 
@@ -44,9 +41,10 @@ In repository kiomatsu0425/ai-news-curator, summarize pending RSS articles witho
 
 Environment:
 - The app stores articles, summaries, feedback, and ranking weights in Neon Postgres.
-- Get DATABASE_URL from Neon Console > Project > Connect. Use the pooled connection string when available.
-- For local Codex Automation execution, DATABASE_URL must be written in the repository root `.env` file.
-- The `.env` line must look like: DATABASE_URL=postgresql://...-pooler.../neondb?sslmode=require&channel_binding=require
+- For local Codex Automation execution, read DATABASE_URL from the repository root `.env` file.
+- The `.env` file is the only local source of the Neon connection string during automation runs.
+- If DATABASE_URL is missing or the database connection fails because of credentials, stop and report that the user must update `.env`.
+- Do not open Neon Console or try to retrieve credentials during the automation run.
 - Do not edit data/news_items.json. It is legacy import data only.
 - Do not commit generated article data back to GitHub.
 
