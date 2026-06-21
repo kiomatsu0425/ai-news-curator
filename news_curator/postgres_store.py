@@ -22,6 +22,7 @@ BROKEN_TEXT_PATTERNS = (
 )
 JAPANESE_CHAR_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
 FEEDBACK_DELTAS = {"opened": 1.0, "useful": 0.65, "bad": -1.1, "later": 0.15}
+_DB_INITIALIZED = False
 
 
 def utc_now() -> str:
@@ -53,6 +54,10 @@ def connect() -> Iterator[Any]:
 
 
 def init_db(conn: Any) -> None:
+    global _DB_INITIALIZED
+    if _DB_INITIALIZED:
+        return
+
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS articles (
@@ -71,10 +76,12 @@ def init_db(conn: Any) -> None:
             selected_date DATE,
             selected_rank INTEGER,
             selected_bucket TEXT,
+            displayed_at TIMESTAMPTZ,
             opened_at TIMESTAMPTZ
         )
         """
     )
+    conn.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS displayed_at TIMESTAMPTZ")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS feedback (
@@ -105,7 +112,17 @@ def init_db(conn: Any) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_selected ON articles(selected_date, selected_rank)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_displayed ON articles(displayed_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_article ON feedback(article_url)")
+    conn.execute(
+        """
+        UPDATE articles
+        SET displayed_at = selected_date::timestamptz
+        WHERE displayed_at IS NULL
+          AND selected_date IS NOT NULL
+        """
+    )
+    _DB_INITIALIZED = True
 
 
 def ensure_db() -> None:
@@ -123,7 +140,7 @@ def _article_row(row: dict[str, Any]) -> dict[str, Any]:
     article = dict(row)
     tags = article.pop("tags_json", []) or []
     article["tags"] = tags if isinstance(tags, list) else json.loads(tags)
-    for key in ("published_at", "fetched_at", "opened_at"):
+    for key in ("published_at", "fetched_at", "displayed_at", "opened_at"):
         if article.get(key) is not None:
             article[key] = article[key].isoformat()
     if article.get("selected_date") is not None:
@@ -345,6 +362,7 @@ def select_daily_articles(
             FROM articles
             WHERE jp_title IS NOT NULL
               AND jp_summary IS NOT NULL
+              AND displayed_at IS NULL
               AND NOT EXISTS (
                   SELECT 1 FROM feedback f
                   WHERE f.article_url = articles.url
@@ -396,21 +414,24 @@ def select_daily_articles(
             selected.append(article)
             source_counts[article["source"]] += 1
 
+        now = utc_now()
         for rank, article in enumerate(selected, start=1):
             bucket = "exploration" if rank > ranked_target else "ranked"
             article["selected_date"] = today_key
             article["selected_rank"] = rank
             article["selected_bucket"] = bucket
+            article["displayed_at"] = article.get("displayed_at") or now
             conn.execute(
                 """
                 UPDATE articles
                 SET selected_date = %s,
                     selected_rank = %s,
                     selected_bucket = %s,
-                    score = %s
+                    score = %s,
+                    displayed_at = COALESCE(displayed_at, %s)
                 WHERE url = %s
                 """,
-                (today_key, rank, bucket, article["score"], article["url"]),
+                (today_key, rank, bucket, article["score"], now, article["url"]),
             )
 
     return selected
@@ -446,17 +467,18 @@ def record_feedback(url: str, action: str) -> None:
             (article["source"], delta, now),
         )
 
-        tags = article.get("tags_json") or []
-        if isinstance(tags, str):
-            tags = json.loads(tags)
-        for tag in tags:
+        tags_json = article.get("tags_json") or []
+        if not isinstance(tags_json, str):
+            tags_json = json.dumps(tags_json, ensure_ascii=False)
+        if tags_json != "[]":
             conn.execute(
                 """
                 INSERT INTO tag_weights (tag, weight, updated_at)
-                VALUES (%s, %s, %s)
+                SELECT tag, %s, %s
+                FROM jsonb_array_elements_text(%s::jsonb) AS tags(tag)
                 ON CONFLICT (tag) DO UPDATE SET
                     weight = tag_weights.weight + EXCLUDED.weight,
                     updated_at = EXCLUDED.updated_at
                 """,
-                (tag, delta, now),
+                (delta, now, tags_json),
             )
