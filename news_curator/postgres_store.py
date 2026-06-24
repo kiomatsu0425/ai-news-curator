@@ -241,6 +241,73 @@ def store_stats() -> dict[str, Any]:
     }
 
 
+def latest_feedback_by_article(limit: int = 200) -> list[dict[str, Any]]:
+    with connect() as conn:
+        init_db(conn)
+        rows = conn.execute(
+            """
+            WITH ranked_feedback AS (
+                SELECT
+                    f.article_url,
+                    f.action,
+                    f.created_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY f.article_url
+                        ORDER BY f.created_at DESC, f.id DESC
+                    ) AS row_number
+                FROM feedback f
+            )
+            SELECT
+                rf.article_url AS url,
+                rf.action,
+                rf.created_at,
+                a.title,
+                a.jp_title,
+                a.source
+            FROM ranked_feedback rf
+            LEFT JOIN articles a ON a.url = rf.article_url
+            WHERE rf.row_number = 1
+            ORDER BY rf.created_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        if item.get("created_at") is not None:
+            item["created_at"] = item["created_at"].isoformat()
+        item["display_title"] = item.get("jp_title") or item.get("title") or item["url"]
+        items.append(item)
+    return items
+
+
+def source_weight_rows(feeds: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    with connect() as conn:
+        init_db(conn)
+        weights = {
+            row["source"]: float(row["weight"])
+            for row in conn.execute("SELECT source, weight FROM source_weights").fetchall()
+        }
+
+    rows = []
+    for feed in feeds:
+        base_weight = float(feed.get("base_weight", 0.8))
+        learned_weight = weights.get(feed["name"], 0.0)
+        rows.append(
+            {
+                "name": feed["name"],
+                "topic": feed.get("topic") or "",
+                "url": feed["url"],
+                "base_weight": base_weight,
+                "learned_weight": learned_weight,
+                "effective_weight": base_weight + learned_weight,
+            }
+        )
+    rows.sort(key=lambda row: (-row["effective_weight"], row["name"]))
+    return rows
+
+
 def pending_articles(limit: int = 12) -> list[dict[str, Any]]:
     with connect() as conn:
         init_db(conn)

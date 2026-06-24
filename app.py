@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hmac
 import json
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date
@@ -8,53 +7,21 @@ from typing import Any
 
 import streamlit as st
 
-from news_curator.config import load_feeds, load_settings
 from news_curator.postgres_store import record_feedback, select_daily_articles, store_stats
+from news_curator.streamlit_ui import ACTION_LABELS, APP_TITLE, load_feed_definitions, require_password
 
 
-APP_TITLE = "個人ニュースキュレーター"
 FEEDBACK_EXECUTOR = ThreadPoolExecutor(max_workers=2)
-FEEDBACK_LABELS = {
-    "useful": "役に立った",
-    "bad": "不要",
-    "later": "あとで読む",
-}
 
 
 st.set_page_config(page_title=APP_TITLE, layout="centered")
 
 
-def require_password() -> bool:
-    settings = load_settings()
-    if not settings.app_password:
-        return True
-
-    if st.session_state.get("authenticated"):
-        return True
-
-    st.title(APP_TITLE)
-    st.caption("続けるにはアプリのパスワードを入力してください。")
-
-    with st.form("password_form"):
-        password = st.text_input("パスワード", type="password")
-        submitted = st.form_submit_button("開く", use_container_width=True)
-
-    if submitted:
-        if hmac.compare_digest(password, settings.app_password):
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("パスワードが違います。")
-
-    return False
-
-
 def build_feed_weights() -> tuple[str, dict[str, float], int, int]:
-    settings = load_settings()
-    feeds = load_feeds(settings.feeds_path)
+    feeds, daily_limit, exploration_count = load_feed_definitions()
     feeds_json = json.dumps(feeds, ensure_ascii=False, sort_keys=True)
     feed_weights = {feed["name"]: float(feed.get("base_weight", 0.8)) for feed in feeds}
-    return feeds_json, feed_weights, settings.daily_limit, settings.exploration_count
+    return feeds_json, feed_weights, daily_limit, exploration_count
 
 
 @st.cache_data(show_spinner=False, ttl=60)
@@ -169,6 +136,16 @@ def reset_to_first_card() -> None:
     st.session_state.card_index = 0
 
 
+def show_previous_card() -> None:
+    st.session_state.card_index = max(0, st.session_state.card_index - 1)
+
+
+def show_next_card() -> None:
+    total = len(st.session_state.articles)
+    if total:
+        st.session_state.card_index = min(total - 1, st.session_state.card_index + 1)
+
+
 def render_article(article: dict[str, Any], index: int, total: int) -> None:
     tags = article.get("tags") or []
     bucket = "探索枠" if article.get("selected_bucket") == "exploration" else "推薦"
@@ -182,21 +159,21 @@ def render_article(article: dict[str, Any], index: int, total: int) -> None:
 
     cols = st.columns(4)
     cols[0].button(
-        FEEDBACK_LABELS["useful"],
+        ACTION_LABELS["useful"],
         key=f"useful:{article['url']}",
         use_container_width=True,
         on_click=queue_feedback,
         args=(article["url"], "useful", True),
     )
     cols[1].button(
-        FEEDBACK_LABELS["bad"],
+        ACTION_LABELS["bad"],
         key=f"bad:{article['url']}",
         use_container_width=True,
         on_click=queue_feedback,
         args=(article["url"], "bad", True),
     )
     cols[2].button(
-        FEEDBACK_LABELS["later"],
+        ACTION_LABELS["later"],
         key=f"later:{article['url']}",
         use_container_width=True,
         on_click=queue_feedback,
@@ -204,6 +181,20 @@ def render_article(article: dict[str, Any], index: int, total: int) -> None:
     )
     if cols[3].link_button("元記事", article["url"], use_container_width=True):
         queue_feedback(article["url"], "opened", False)
+
+    nav_cols = st.columns(2)
+    nav_cols[0].button(
+        "戻る",
+        use_container_width=True,
+        disabled=index <= 0,
+        on_click=show_previous_card,
+    )
+    nav_cols[1].button(
+        "進む",
+        use_container_width=True,
+        disabled=index >= total - 1,
+        on_click=show_next_card,
+    )
 
 
 def render_intro() -> None:
