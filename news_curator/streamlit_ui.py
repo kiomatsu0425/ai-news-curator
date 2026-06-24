@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hmac
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -14,6 +16,25 @@ ACTION_LABELS = {
     "later": "あとで読む",
     "opened": "元記事を開いた",
 }
+JST = ZoneInfo("Asia/Tokyo")
+
+
+def format_jst(value: object, default: str = "未更新") -> str:
+    if value in (None, ""):
+        return default
+
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value)
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return text
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(JST).strftime("%Y-%m-%d %H:%M:%S JST")
 
 
 def require_password() -> bool:

@@ -8,7 +8,13 @@ from typing import Any
 import streamlit as st
 
 from news_curator.postgres_store import record_feedback, select_daily_articles, store_stats
-from news_curator.streamlit_ui import ACTION_LABELS, APP_TITLE, load_feed_definitions, require_password
+from news_curator.streamlit_ui import (
+    ACTION_LABELS,
+    APP_TITLE,
+    format_jst,
+    load_feed_definitions,
+    require_password,
+)
 
 
 FEEDBACK_EXECUTOR = ThreadPoolExecutor(max_workers=2)
@@ -155,7 +161,7 @@ def render_article(article: dict[str, Any], index: int, total: int) -> None:
     if tags:
         st.write(" ".join(f"`{tag}`" for tag in tags))
     if article.get("published_at"):
-        st.caption(f"published: {article['published_at']}")
+        st.caption(f"published: {format_jst(article['published_at'])}")
 
     cols = st.columns(4)
     cols[0].button(
@@ -223,7 +229,7 @@ def render_sidebar() -> None:
         st.header("データ")
         st.caption(f"保存記事: {stats['articles']}件")
         st.caption(f"フィードバック: {stats['feedback']}件")
-        st.caption(f"最終更新: {stats.get('generated_at') or '未更新'}")
+        st.caption(f"最終更新: {format_jst(stats.get('generated_at'))}")
 
         if st.session_state.feedback_future is not None or st.session_state.pending_feedbacks:
             st.caption("フィードバックを同期中...")
